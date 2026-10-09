@@ -1,0 +1,7 @@
+{
+    "name": "TreeTransparency",
+    "version_number": "1.1.1",
+    "website_url": "",
+    "description": "Client-side tree transparency toggle with configurable hotkey and opacity slider. Useful for building through foliage.",
+    "dependencies": []
+}   
