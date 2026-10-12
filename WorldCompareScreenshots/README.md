@@ -6,12 +6,14 @@ Ideal for comparing a completed endgame base against a fresh seed, or documentin
 
 ## Features
 
-- **Multi-Waypoint Recording**: Save multiple locations and camera angles in your primary world (harbor, great hall, watchtower, portal hub) before switching worlds.
+- **Multi-Waypoint Recording**: Save multiple locations, camera rotations, and zoom distances in your primary world (harbor, great hall, watchtower, portal hub) before switching worlds.
+- **Camera Zoom & First-Person Support**: Records exact camera zoom distance (`m_distance`), seamlessly supporting first-person mods (zoom distance 0) to hide player models for pristine architectural and environmental shots.
 - **Persistent Across Worlds and Sessions**: Waypoints are saved to disk (`BepInEx/config/WorldCompareWaypoints.json` by default) in human-readable JSON, so they survive game restarts and are immediately available in any world.
 - **Automated Sequence Capture**: A single keypress automatically visits and captures all saved waypoints in sequence.
-- **Clean Comparison Shots**: Automatically hides the Valheim HUD and mod menus during capture for clean, unobstructed side-by-side comparison images.
+- **Loading Screen & Teleport Settling**: Intelligently waits for Valheim's teleport animation, terrain chunk streaming, and loading screens to clear before capturing each frame, resetting teleport cooldowns between waypoints.
+- **Clean Comparison Shots**: Automatically hides the Valheim HUD, loading screens, and mod menus during capture for clean, unobstructed side-by-side comparison images.
 - **Safe Positioning**: Temporarily enables fly mode during positioning to prevent fall damage when capturing elevated or aerial angles.
-- **Predictable File Naming**: Screenshots are saved to `BepInEx/screenshots/WorldCompare/` formatted as:
+- **Predictable File Naming & Mod Manager Ready**: Screenshots are saved to `BepInEx/screenshots/WorldCompare/` (resolved relative to the active BepInEx root for full Gale / r2modman / Thunderstore profile compatibility) formatted as:
   ```text
   {Index:D2}_{WaypointName}__{WorldName}__{Timestamp}.png
   ```

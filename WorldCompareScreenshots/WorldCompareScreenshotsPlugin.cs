@@ -79,8 +79,8 @@ namespace WorldCompareScreenshots
 
             // Bind Settings
             _screenshotDirectoryConfig = Config.Bind("Settings", "ScreenshotDirectory",
-                "Screenshots/WorldCompare",
-                "Directory where comparison screenshots are saved (relative to game root or absolute path).");
+                "screenshots/WorldCompare",
+                "Directory where comparison screenshots are saved (relative to BepInEx root folder or absolute path).");
 
             _settleDelayConfig = Config.Bind("Settings", "SettleDelaySeconds",
                 1.5f,
@@ -103,13 +103,32 @@ namespace WorldCompareScreenshots
             _waypointsFilePath = Path.Combine(Paths.ConfigPath, "WorldCompareScreenshots_waypoints.json");
 
             string rawDir = _screenshotDirectoryConfig.Value;
+            if (string.IsNullOrWhiteSpace(rawDir))
+            {
+                rawDir = "screenshots/WorldCompare";
+            }
+
             if (Path.IsPathRooted(rawDir))
             {
                 _resolvedScreenshotDir = rawDir;
             }
             else
             {
-                _resolvedScreenshotDir = Path.Combine(Paths.GameRootPath, rawDir);
+                string bepinexDir = Paths.BepInExRootPath;
+                if (string.IsNullOrEmpty(bepinexDir) || !Directory.Exists(bepinexDir))
+                {
+                    bepinexDir = Paths.GameRootPath;
+                }
+                _resolvedScreenshotDir = Path.Combine(bepinexDir, rawDir);
+            }
+
+            try
+            {
+                Directory.CreateDirectory(_resolvedScreenshotDir);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"Could not pre-create screenshot directory '{_resolvedScreenshotDir}': {ex.Message}");
             }
 
             // Load saved waypoints from disk
@@ -180,6 +199,7 @@ namespace WorldCompareScreenshots
             Vector3 pos = ValheimAdapter.GetCurrentCameraPosition();
             Quaternion rot = ValheimAdapter.GetCurrentCameraRotation();
             float fov = ValheimAdapter.GetCurrentFov();
+            float cameraDistance = ValheimAdapter.GetCurrentCameraDistance();
             bool isFreeFly = ValheimAdapter.IsFreeFlyActive();
             string worldName = GetEffectiveWorldName();
 
@@ -189,13 +209,13 @@ namespace WorldCompareScreenshots
                 name = $"Waypoint_{_waypoints.Count + 1}";
             }
 
-            var wp = ScreenshotWaypoint.Create(pos, rot, fov, name, worldName, isFreeFly);
+            var wp = ScreenshotWaypoint.Create(pos, rot, fov, cameraDistance, name, worldName, isFreeFly);
             _waypoints.Add(wp);
             _selectedWaypointIndex = _waypoints.Count - 1;
 
             SaveWaypointsToDisk();
 
-            string msg = $"Waypoint saved: {wp.name} at ({pos.x:F1}, {pos.y:F1}, {pos.z:F1})";
+            string msg = $"Waypoint saved: {wp.name} at ({pos.x:F1}, {pos.y:F1}, {pos.z:F1}) zoom={cameraDistance:F1}";
             SetStatusBanner(msg);
             Logger.LogInfo(msg);
             ValheimAdapter.ShowGameMessage(msg);
@@ -275,6 +295,38 @@ namespace WorldCompareScreenshots
             _activeCaptureCoroutine = StartCoroutine(CaptureSequenceRoutine());
         }
 
+        private IEnumerator WaitForTeleportAndSettle(ScreenshotWaypoint wp)
+        {
+            // Wait for player teleporting state to clear (up to 20s)
+            float teleportWait = 0f;
+            while (ValheimAdapter.IsPlayerTeleporting() && teleportWait < 20f)
+            {
+                teleportWait += 0.1f;
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
+
+            // Wait for loading screen / black screen fade to clear (up to 5s)
+            float loadingWait = 0f;
+            while (ValheimAdapter.IsLoadingScreenVisible() && loadingWait < 5f)
+            {
+                loadingWait += 0.1f;
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
+
+            // Ensure loading screen is hidden during screenshot
+            ValheimAdapter.SetLoadingScreenVisible(false);
+
+            // Settle delay for terrain meshes, textures, shadows, and LODs to render
+            float settle = Mathf.Max(0.5f, _settleDelayConfig.Value);
+            yield return new WaitForSecondsRealtime(settle);
+
+            // Re-apply exact waypoint transform, rotation, FOV, and camera distance/zoom
+            if (wp != null)
+            {
+                ValheimAdapter.ApplyCameraTransform(wp);
+            }
+        }
+
         private IEnumerator CaptureSingleRoutine(ScreenshotWaypoint wp, int index)
         {
             _isCapturing = true;
@@ -286,24 +338,8 @@ namespace WorldCompareScreenshots
                 ValheimAdapter.TeleportToWaypoint(wp, _enableFlyOnTeleport.Value);
             }
 
-            // Wait for teleporting state to clear
-            float teleportWait = 0f;
-            while (ValheimAdapter.IsPlayerTeleporting() && teleportWait < 5f)
-            {
-                teleportWait += Time.unscaledDeltaTime;
-                yield return null;
-            }
+            yield return StartCoroutine(WaitForTeleportAndSettle(wp));
 
-            // Settle delay for terrain/assets to finish loading
-            yield return new WaitForSecondsRealtime(Mathf.Max(0.2f, _settleDelayConfig.Value));
-
-            // Re-align camera
-            if (wp != null)
-            {
-                ValheimAdapter.TeleportToWaypoint(wp, _enableFlyOnTeleport.Value);
-            }
-
-            // Hide HUD
             bool hideHud = _hideHudDuringCapture.Value;
             if (hideHud)
             {
@@ -321,6 +357,7 @@ namespace WorldCompareScreenshots
             {
                 ValheimAdapter.SetHudVisible(true);
             }
+            ValheimAdapter.SetLoadingScreenVisible(true);
 
             _isCapturing = false;
             string msg = $"Saved: {fileName}";
@@ -348,19 +385,7 @@ namespace WorldCompareScreenshots
                 SetStatusBanner($"Capturing [{i + 1}/{total}] {wp.name}...");
                 ValheimAdapter.TeleportToWaypoint(wp, _enableFlyOnTeleport.Value);
 
-                // Wait for teleporting state to clear
-                float teleportWait = 0f;
-                while (ValheimAdapter.IsPlayerTeleporting() && teleportWait < 5f)
-                {
-                    teleportWait += Time.unscaledDeltaTime;
-                    yield return null;
-                }
-
-                // Settle delay
-                yield return new WaitForSecondsRealtime(Mathf.Max(0.2f, _settleDelayConfig.Value));
-
-                // Re-align camera
-                ValheimAdapter.TeleportToWaypoint(wp, _enableFlyOnTeleport.Value);
+                yield return StartCoroutine(WaitForTeleportAndSettle(wp));
 
                 if (hideHud)
                 {
@@ -378,13 +403,14 @@ namespace WorldCompareScreenshots
                 {
                     ValheimAdapter.SetHudVisible(true);
                 }
+                ValheimAdapter.SetLoadingScreenVisible(true);
 
                 Logger.LogInfo($"[{i + 1}/{total}] Captured: {fileName}");
-                yield return new WaitForSecondsRealtime(0.2f);
+                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             _isCapturing = false;
-            string completeMsg = $"Sequence complete: {total} screenshots saved for world '{worldName}'";
+            string completeMsg = $"Sequence complete: {total} screenshots saved to {_resolvedScreenshotDir}";
             SetStatusBanner(completeMsg);
             Logger.LogInfo(completeMsg);
             ValheimAdapter.ShowGameMessage(completeMsg);
@@ -408,18 +434,26 @@ namespace WorldCompareScreenshots
                 byte[] bytes = ImageConversion.EncodeToPNG(tex);
                 Destroy(tex);
                 File.WriteAllBytes(fullPath, bytes);
+
+                if (File.Exists(fullPath) && new FileInfo(fullPath).Length > 0)
+                {
+                    Logger.LogInfo($"Saved screenshot: {fullPath} ({new FileInfo(fullPath).Length} bytes)");
+                    return;
+                }
             }
             catch (Exception ex)
             {
                 Logger.LogWarning($"ReadPixels capture error: {ex.Message}. Falling back to ScreenCapture.");
-                try
-                {
-                    ScreenCapture.CaptureScreenshot(fullPath);
-                }
-                catch (Exception fallbackEx)
-                {
-                    Logger.LogError($"Failed to capture screenshot: {fallbackEx.Message}");
-                }
+            }
+
+            try
+            {
+                ScreenCapture.CaptureScreenshot(fullPath);
+                Logger.LogInfo($"Saved screenshot via ScreenCapture to: {fullPath}");
+            }
+            catch (Exception fallbackEx)
+            {
+                Logger.LogError($"Failed to capture screenshot: {fallbackEx.Message}");
             }
         }
 

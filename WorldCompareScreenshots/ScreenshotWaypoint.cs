@@ -19,6 +19,7 @@ namespace WorldCompareScreenshots
         public float yaw;
         public float roll;
         public float fov = 65f;
+        public float cameraDistance = 4f;
         public bool isFreeFly;
         public string createdDate = "";
         public string sourceWorld = "";
@@ -81,6 +82,7 @@ namespace WorldCompareScreenshots
             float rotZ,
             float rotW,
             float fov,
+            float cameraDistance,
             string name,
             string sourceWorld,
             bool isFreeFly)
@@ -102,10 +104,45 @@ namespace WorldCompareScreenshots
                 yaw = yaw,
                 roll = roll,
                 fov = fov > 0f ? fov : 65f,
+                cameraDistance = cameraDistance >= 0f ? cameraDistance : 4f,
                 isFreeFly = isFreeFly,
                 createdDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                 sourceWorld = sourceWorld ?? ""
             };
+        }
+
+        public static ScreenshotWaypoint Create(
+            float posX,
+            float posY,
+            float posZ,
+            float rotX,
+            float rotY,
+            float rotZ,
+            float rotW,
+            float fov,
+            string name,
+            string sourceWorld,
+            bool isFreeFly)
+        {
+            return Create(
+                posX, posY, posZ,
+                rotX, rotY, rotZ, rotW,
+                fov, 4f, name, sourceWorld, isFreeFly);
+        }
+
+        public static ScreenshotWaypoint Create(
+            Vector3 position,
+            Quaternion rotation,
+            float fov,
+            float cameraDistance,
+            string name,
+            string sourceWorld,
+            bool isFreeFly)
+        {
+            return Create(
+                position.x, position.y, position.z,
+                rotation.x, rotation.y, rotation.z, rotation.w,
+                fov, cameraDistance, name, sourceWorld, isFreeFly);
         }
 
         public static ScreenshotWaypoint Create(
@@ -119,7 +156,7 @@ namespace WorldCompareScreenshots
             return Create(
                 position.x, position.y, position.z,
                 rotation.x, rotation.y, rotation.z, rotation.w,
-                fov, name, sourceWorld, isFreeFly);
+                fov, 4f, name, sourceWorld, isFreeFly);
         }
     }
 }

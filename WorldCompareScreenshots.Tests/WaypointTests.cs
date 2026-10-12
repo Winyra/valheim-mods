@@ -250,6 +250,75 @@ namespace WorldCompareScreenshots.Tests
             ValheimAdapter.SetHudVisible(false);
             ValheimAdapter.SetHudVisible(true);
             ValheimAdapter.ShowGameMessage("Test message");
+
+            // Camera distance and loading screen checks
+            float dist = ValheimAdapter.GetCurrentCameraDistance();
+            Assert.AreEqual(4f, dist, 0.01f);
+            ValheimAdapter.SetCameraDistance(2.5f);
+
+            bool loading = ValheimAdapter.IsLoadingScreenVisible();
+            Assert.IsFalse(loading);
+            ValheimAdapter.SetLoadingScreenVisible(false);
+            ValheimAdapter.SetLoadingScreenVisible(true);
+
+            ValheimAdapter.ResetTeleportCooldown();
+        }
+
+        [TestMethod]
+        public void Create_WithCameraDistance_InitializesCameraDistanceProperly()
+        {
+            var wpFirstPerson = ScreenshotWaypoint.Create(10f, 20f, 30f, 0f, 0f, 0f, 1f, 65f, 0f, "First Person Spot", "World", false);
+            Assert.AreEqual(0f, wpFirstPerson.cameraDistance, 0.001f);
+
+            var wpThirdPerson = ScreenshotWaypoint.Create(10f, 20f, 30f, 0f, 0f, 0f, 1f, 65f, 5.5f, "Third Person Spot", "World", false);
+            Assert.AreEqual(5.5f, wpThirdPerson.cameraDistance, 0.001f);
+
+            var wpDefault = ScreenshotWaypoint.Create(10f, 20f, 30f, 0f, 0f, 0f, 1f, 65f, "Default Distance Spot", "World", false);
+            Assert.AreEqual(4f, wpDefault.cameraDistance, 0.001f);
+        }
+
+        [TestMethod]
+        public void Json_RoundTrip_IncludesCameraDistance()
+        {
+            var list = new List<ScreenshotWaypoint>
+            {
+                ScreenshotWaypoint.Create(1f, 2f, 3f, 0f, 0f, 0f, 1f, 75f, 0.5f, "Zoomed In", "WorldX", false)
+            };
+
+            string json = WaypointJson.Serialize(list);
+            StringAssert.Contains(json, "\"cameraDistance\": 0.5");
+
+            var deserialized = WaypointJson.Deserialize(json);
+            Assert.HasCount(1, deserialized);
+            Assert.AreEqual(0.5f, deserialized[0].cameraDistance, 0.001f);
+        }
+
+        [TestMethod]
+        public void Json_Deserialize_LegacyJsonWithoutCameraDistance_DefaultsTo4()
+        {
+            string legacyJson = @"
+            {
+              ""waypoints"": [
+                {
+                  ""id"": ""legacy-1"",
+                  ""name"": ""Old Waypoint"",
+                  ""posX"": 10.0,
+                  ""posY"": 20.0,
+                  ""posZ"": 30.0,
+                  ""rotX"": 0.0,
+                  ""rotY"": 0.0,
+                  ""rotZ"": 0.0,
+                  ""rotW"": 1.0,
+                  ""fov"": 65.0,
+                  ""isFreeFly"": false
+                }
+              ]
+            }";
+
+            var list = WaypointJson.Deserialize(legacyJson);
+            Assert.HasCount(1, list);
+            Assert.AreEqual("Old Waypoint", list[0].name);
+            Assert.AreEqual(4f, list[0].cameraDistance, 0.001f);
         }
     }
 }

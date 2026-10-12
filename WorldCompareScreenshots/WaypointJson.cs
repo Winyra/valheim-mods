@@ -36,6 +36,7 @@ namespace WorldCompareScreenshots
                     sb.AppendLine($"      \"yaw\": {wp.yaw.ToString("G9", CultureInfo.InvariantCulture)},");
                     sb.AppendLine($"      \"roll\": {wp.roll.ToString("G9", CultureInfo.InvariantCulture)},");
                     sb.AppendLine($"      \"fov\": {wp.fov.ToString("G9", CultureInfo.InvariantCulture)},");
+                    sb.AppendLine($"      \"cameraDistance\": {wp.cameraDistance.ToString("G9", CultureInfo.InvariantCulture)},");
                     sb.AppendLine($"      \"isFreeFly\": {(wp.isFreeFly ? "true" : "false")},");
                     sb.AppendLine($"      \"createdDate\": \"{EscapeString(wp.createdDate)}\",");
                     sb.AppendLine($"      \"sourceWorld\": \"{EscapeString(wp.sourceWorld)}\"");
@@ -189,6 +190,9 @@ namespace WorldCompareScreenshots
                         break;
                     case "fov":
                         wp.fov = ParseFloat(val, 65f);
+                        break;
+                    case "cameradistance":
+                        wp.cameraDistance = ParseFloat(val, 4f);
                         break;
                     case "isfreefly":
                         wp.isFreeFly = bool.TryParse(val, out bool ff) && ff;

@@ -6,12 +6,14 @@ Perfect for comparing a completed endgame base against a fresh seed, or document
 
 ## Features
 
-- **Multi-Waypoint Recording**: Save multiple locations and camera angles in your primary world (e.g. harbor, main hall, tower overlook, portal hub) before switching worlds.
+- **Multi-Waypoint Recording**: Save multiple locations, camera rotations, and zoom distances in your primary world (e.g. harbor, main hall, tower overlook, portal hub) before switching worlds.
+- **Camera Zoom & First-Person Support**: Records exact camera zoom distance, preserving first-person views (zoom 0) to hide player models for pristine comparison shots.
 - **Persistent Across Worlds**: Waypoints are saved to disk (`BepInEx/config/WorldCompareWaypoints.json`) in human-readable JSON so they persist across game restarts and world changes.
 - **Automated Sequence Capture**: Press **F8** to automatically teleport to each waypoint, wait for terrain to settle, hide the HUD, and capture screenshots in sequence.
+- **Loading Screen & Teleport Settling**: Monitors Valheim's teleport and loading screens to ensure every screenshot is taken only after the scene is completely rendered.
 - **Clean Comparison Shots**: Automatically hides the Valheim HUD and mod menus during capture.
 - **Safe Positioning**: Temporarily enables fly mode during positioning to prevent fall damage at high elevation.
-- **Predictable File Naming**: Saved to `BepInEx/screenshots/WorldCompare/` as `{Index:D2}_{WaypointName}__{WorldName}__{Timestamp}.png` for easy alphabetical grouping and side-by-side comparison.
+- **Predictable File Naming & Mod Manager Ready**: Saved directly to `BepInEx/screenshots/WorldCompare/` (compatible with Gale, r2modman, and Thunderstore Mod Manager profiles) as `{Index:D2}_{WaypointName}__{WorldName}__{Timestamp}.png` for easy alphabetical grouping and side-by-side comparison.
 - **In-Game Overlay**: Press **F10** to manage, rename, teleport to, or delete waypoints.
 
 ## Default Keybinds

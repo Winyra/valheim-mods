@@ -19,25 +19,31 @@ namespace WorldCompareScreenshots
         private static FieldInfo _playerLocalPlayerField;
         private static MethodInfo _playerTeleportToMethod;
         private static MethodInfo _playerIsTeleportingMethod;
+        private static FieldInfo _playerTeleportCooldownField;
         private static FieldInfo _playerFlyingField;
         private static FieldInfo _playerGhostModeField;
         private static FieldInfo _playerGodModeField;
         private static MethodInfo _playerSetLookDirMethod;
         private static FieldInfo _playerLookYawField;
         private static FieldInfo _playerLookPitchField;
+        private static FieldInfo _playerEyeField;
 
         // GameCamera reflection
         private static Type _gameCameraType;
         private static FieldInfo _gameCameraInstanceField;
         private static FieldInfo _gameCameraFreeFlyField;
+        private static FieldInfo _gameCameraFreeFlyYawField;
+        private static FieldInfo _gameCameraFreeFlyPitchField;
         private static FieldInfo _gameCameraYawField;
         private static FieldInfo _gameCameraPitchField;
+        private static FieldInfo _gameCameraDistanceField;
         private static FieldInfo _gameCameraCameraField;
 
         // Hud reflection
         private static Type _hudType;
         private static FieldInfo _hudInstanceField;
         private static FieldInfo _hudRootObjectField;
+        private static FieldInfo _hudLoadingScreenField;
         private static FieldInfo _hudInstanceVisibleField;
         private static MethodInfo _hudSetVisibleMethod;
 
@@ -99,6 +105,58 @@ namespace WorldCompareScreenshots
             }
         }
 
+        private static FieldInfo FindField(Type type, string fieldName, BindingFlags flags)
+        {
+            Type current = type;
+            while (current != null && current != typeof(object))
+            {
+                var f = current.GetField(fieldName, flags);
+                if (f != null) return f;
+                current = current.BaseType;
+            }
+            return null;
+        }
+
+        private static MethodInfo FindMethod(Type type, string methodName, BindingFlags flags, Type[] paramTypes = null)
+        {
+            Type current = type;
+            while (current != null && current != typeof(object))
+            {
+                if (paramTypes != null)
+                {
+                    var m = current.GetMethod(methodName, flags, null, paramTypes, null);
+                    if (m != null) return m;
+                }
+                else
+                {
+                    var m = current.GetMethod(methodName, flags);
+                    if (m != null) return m;
+                }
+                current = current.BaseType;
+            }
+            return null;
+        }
+
+        private static MethodInfo FindMethodByFirstParam(Type type, string methodName, BindingFlags flags, Type firstParamType)
+        {
+            Type current = type;
+            while (current != null && current != typeof(object))
+            {
+                var methods = current.GetMethods(flags);
+                foreach (var m in methods)
+                {
+                    if (m.Name == methodName)
+                    {
+                        var pars = m.GetParameters();
+                        if (pars.Length > 0 && pars[0].ParameterType == firstParamType)
+                            return m;
+                    }
+                }
+                current = current.BaseType;
+            }
+            return null;
+        }
+
         private static void InitPlayer()
         {
             _playerType = _valheimAssembly.GetType("Player");
@@ -107,15 +165,17 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _playerLocalPlayerField = _playerType.GetField("m_localPlayer", staticFlags);
-            _playerTeleportToMethod = _playerType.GetMethod("TeleportTo", instanceFlags, null, new[] { typeof(Vector3), typeof(Quaternion), typeof(bool) }, null);
-            _playerIsTeleportingMethod = _playerType.GetMethod("IsTeleporting", instanceFlags);
-            _playerFlyingField = _playerType.GetField("m_flying", instanceFlags);
-            _playerGhostModeField = _playerType.GetField("m_ghostMode", instanceFlags);
-            _playerGodModeField = _playerType.GetField("m_godMode", instanceFlags);
-            _playerSetLookDirMethod = _playerType.GetMethod("SetLookDir", instanceFlags, null, new[] { typeof(Vector3) }, null);
-            _playerLookYawField = _playerType.GetField("m_lookYaw", instanceFlags);
-            _playerLookPitchField = _playerType.GetField("m_lookPitch", instanceFlags);
+            _playerLocalPlayerField = FindField(_playerType, "m_localPlayer", staticFlags);
+            _playerTeleportToMethod = FindMethod(_playerType, "TeleportTo", instanceFlags, new[] { typeof(Vector3), typeof(Quaternion), typeof(bool) });
+            _playerIsTeleportingMethod = FindMethod(_playerType, "IsTeleporting", instanceFlags);
+            _playerTeleportCooldownField = FindField(_playerType, "m_teleportCooldown", instanceFlags);
+            _playerFlyingField = FindField(_playerType, "m_flying", instanceFlags);
+            _playerGhostModeField = FindField(_playerType, "m_ghostMode", instanceFlags);
+            _playerGodModeField = FindField(_playerType, "m_godMode", instanceFlags);
+            _playerSetLookDirMethod = FindMethodByFirstParam(_playerType, "SetLookDir", instanceFlags, typeof(Vector3));
+            _playerLookYawField = FindField(_playerType, "m_lookYaw", instanceFlags);
+            _playerLookPitchField = FindField(_playerType, "m_lookPitch", instanceFlags);
+            _playerEyeField = FindField(_playerType, "m_eye", instanceFlags);
         }
 
         private static void InitCamera()
@@ -126,11 +186,14 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _gameCameraInstanceField = _gameCameraType.GetField("instance", staticFlags);
-            _gameCameraFreeFlyField = _gameCameraType.GetField("m_freeFly", instanceFlags);
-            _gameCameraYawField = _gameCameraType.GetField("m_yaw", instanceFlags);
-            _gameCameraPitchField = _gameCameraType.GetField("m_pitch", instanceFlags);
-            _gameCameraCameraField = _gameCameraType.GetField("m_camera", instanceFlags);
+            _gameCameraInstanceField = FindField(_gameCameraType, "instance", staticFlags);
+            _gameCameraFreeFlyField = FindField(_gameCameraType, "m_freeFly", instanceFlags);
+            _gameCameraFreeFlyYawField = FindField(_gameCameraType, "m_freeFlyYaw", instanceFlags);
+            _gameCameraFreeFlyPitchField = FindField(_gameCameraType, "m_freeFlyPitch", instanceFlags);
+            _gameCameraYawField = FindField(_gameCameraType, "m_yaw", instanceFlags);
+            _gameCameraPitchField = FindField(_gameCameraType, "m_pitch", instanceFlags);
+            _gameCameraDistanceField = FindField(_gameCameraType, "m_distance", instanceFlags);
+            _gameCameraCameraField = FindField(_gameCameraType, "m_camera", instanceFlags);
         }
 
         private static void InitHud()
@@ -141,10 +204,11 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _hudInstanceField = _hudType.GetField("instance", staticFlags);
-            _hudRootObjectField = _hudType.GetField("m_rootObject", instanceFlags);
-            _hudInstanceVisibleField = _hudType.GetField("m_instanceVisible", staticFlags);
-            _hudSetVisibleMethod = _hudType.GetMethod("SetVisible", instanceFlags, null, new[] { typeof(bool) }, null);
+            _hudInstanceField = FindField(_hudType, "instance", staticFlags);
+            _hudRootObjectField = FindField(_hudType, "m_rootObject", instanceFlags);
+            _hudLoadingScreenField = FindField(_hudType, "m_loadingScreen", instanceFlags);
+            _hudInstanceVisibleField = FindField(_hudType, "m_instanceVisible", staticFlags);
+            _hudSetVisibleMethod = FindMethod(_hudType, "SetVisible", instanceFlags, new[] { typeof(bool) });
         }
 
         private static void InitZNet()
@@ -353,6 +417,12 @@ namespace WorldCompareScreenshots
                 object player = GetLocalPlayer();
                 if (player != null)
                 {
+                    if (_playerEyeField != null)
+                    {
+                        var eye = _playerEyeField.GetValue(player) as Component;
+                        if (eye != null) return eye.transform.rotation;
+                    }
+
                     var trProp = player.GetType().GetProperty("transform");
                     if (trProp != null)
                     {
@@ -418,74 +488,234 @@ namespace WorldCompareScreenshots
             return false;
         }
 
-        public static bool TeleportToWaypoint(ScreenshotWaypoint waypoint, bool enableFly = true)
+        public static bool IsLoadingScreenVisible()
         {
-            if (waypoint == null) return false;
+            Initialize();
+            try
+            {
+                if (_hudInstanceField != null && _hudLoadingScreenField != null)
+                {
+                    object hudInstance = _hudInstanceField.GetValue(null);
+                    if (hudInstance != null)
+                    {
+                        object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
+                        if (loadingScreen != null)
+                        {
+                            var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                            object go = goProp?.GetValue(loadingScreen, null);
+                            if (go != null)
+                            {
+                                var activeInHierarchyProp = go.GetType().GetProperty("activeInHierarchy");
+                                if (activeInHierarchyProp != null && activeInHierarchyProp.GetValue(go, null) is bool active && !active)
+                                    return false;
+                            }
+
+                            var alphaProp = loadingScreen.GetType().GetProperty("alpha");
+                            if (alphaProp != null && alphaProp.GetValue(loadingScreen, null) is float alpha)
+                            {
+                                return alpha > 0.05f;
+                            }
+
+                            if (go != null)
+                            {
+                                var activeSelfProp = go.GetType().GetProperty("activeSelf");
+                                if (activeSelfProp != null && activeSelfProp.GetValue(go, null) is bool selfActive)
+                                    return selfActive;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static void SetLoadingScreenVisible(bool visible)
+        {
+            Initialize();
+            try
+            {
+                if (_hudInstanceField != null && _hudLoadingScreenField != null)
+                {
+                    object hudInstance = _hudInstanceField.GetValue(null);
+                    if (hudInstance != null)
+                    {
+                        object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
+                        if (loadingScreen != null)
+                        {
+                            if (!visible)
+                            {
+                                var alphaProp = loadingScreen.GetType().GetProperty("alpha");
+                                alphaProp?.SetValue(loadingScreen, 0f, null);
+
+                                var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                                object go = goProp?.GetValue(loadingScreen, null);
+                                if (go != null)
+                                {
+                                    var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
+                                    setActive?.Invoke(go, new object[] { false });
+                                }
+                            }
+                            else
+                            {
+                                var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                                object go = goProp?.GetValue(loadingScreen, null);
+                                if (go != null)
+                                {
+                                    var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
+                                    setActive?.Invoke(go, new object[] { true });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static float GetCurrentCameraDistance()
+        {
+            Initialize();
+            try
+            {
+                if (_gameCameraInstanceField != null && _gameCameraDistanceField != null)
+                {
+                    var cam = _gameCameraInstanceField.GetValue(null);
+                    if (cam != null)
+                    {
+                        var val = _gameCameraDistanceField.GetValue(cam);
+                        if (val is float f) return f;
+                    }
+                }
+            }
+            catch { }
+            return 4f;
+        }
+
+        public static void SetCameraDistance(float distance)
+        {
+            Initialize();
+            try
+            {
+                if (_gameCameraInstanceField != null && _gameCameraDistanceField != null)
+                {
+                    var cam = _gameCameraInstanceField.GetValue(null);
+                    if (cam != null)
+                    {
+                        float safeDist = distance < 0f ? 0f : distance;
+                        _gameCameraDistanceField.SetValue(cam, safeDist);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static void ResetTeleportCooldown()
+        {
+            Initialize();
+            try
+            {
+                var player = GetLocalPlayer();
+                if (player != null && _playerTeleportCooldownField != null)
+                {
+                    _playerTeleportCooldownField.SetValue(player, 5.0f);
+                }
+            }
+            catch { }
+        }
+
+        public static void ApplyCameraTransform(ScreenshotWaypoint waypoint)
+        {
+            if (waypoint == null) return;
             Initialize();
 
             Vector3 targetPos = waypoint.Position;
             Quaternion targetRot = waypoint.Rotation;
 
-            bool handled = false;
-
-            // 1. Position local player if present
             var player = GetLocalPlayer() as Component;
             if (player != null)
             {
-                try
-                {
-                    if (enableFly && _playerFlyingField != null)
-                    {
-                        _playerFlyingField.SetValue(player, true);
-                    }
-                    if (enableFly && _playerGhostModeField != null)
-                    {
-                        _playerGhostModeField.SetValue(player, true);
-                    }
-                    if (enableFly && _playerGodModeField != null)
-                    {
-                        _playerGodModeField.SetValue(player, true);
-                    }
-
-                    // Reset physics velocity so player does not carry momentum
-                    var rb = player.GetComponent<Rigidbody>();
-                    if (rb != null)
-                    {
-                        rb.velocity = Vector3.zero;
-                        rb.angularVelocity = Vector3.zero;
-                    }
-
-                    // Teleport player
-                    if (_playerTeleportToMethod != null)
-                    {
-                        _playerTeleportToMethod.Invoke(player, new object[] { targetPos, targetRot, true });
-                    }
-                    else
-                    {
-                        player.transform.position = targetPos;
-                        player.transform.rotation = targetRot;
-                    }
-
-                    // Set look angles
-                    if (_playerSetLookDirMethod != null)
-                    {
-                        _playerSetLookDirMethod.Invoke(player, new object[] { targetRot * Vector3.forward });
-                    }
-                    if (_playerLookYawField != null)
-                    {
-                        _playerLookYawField.SetValue(player, targetRot.eulerAngles.y);
-                    }
-                    if (_playerLookPitchField != null)
-                    {
-                        _playerLookPitchField.SetValue(player, targetRot.eulerAngles.x);
-                    }
-
-                    handled = true;
-                }
-                catch { }
+                player.transform.position = targetPos;
+                ApplyPlayerRotation(player, targetRot);
             }
 
-            // 2. Align GameCamera if present
+            ApplyGameCameraTransform(targetPos, targetRot, waypoint.fov, waypoint.cameraDistance);
+        }
+
+        private static void ApplyPlayerFlightAndGodMode(Component player, bool enableFly)
+        {
+            if (!enableFly) return;
+            try
+            {
+                _playerFlyingField?.SetValue(player, true);
+                _playerGhostModeField?.SetValue(player, true);
+                _playerGodModeField?.SetValue(player, true);
+            }
+            catch { }
+        }
+
+        private static void ResetPlayerPhysics(Component player)
+        {
+            try
+            {
+                var rb = player.GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+            }
+            catch { }
+        }
+
+        private static void ApplyPlayerRotation(Component player, Quaternion targetRot)
+        {
+            try
+            {
+                float yaw = targetRot.eulerAngles.y;
+                float halfRad = (yaw * (float)Math.PI / 180f) * 0.5f;
+                Quaternion yawQuat = new Quaternion(0f, (float)Math.Sin(halfRad), 0f, (float)Math.Cos(halfRad));
+                Vector3 forward = targetRot * Vector3.forward;
+
+                player.transform.rotation = yawQuat;
+
+                if (_playerLookYawField != null)
+                {
+                    if (_playerLookYawField.FieldType == typeof(Quaternion))
+                        _playerLookYawField.SetValue(player, yawQuat);
+                    else
+                        _playerLookYawField.SetValue(player, targetRot.eulerAngles.y);
+                }
+
+                if (_playerLookPitchField != null)
+                {
+                    float pitch = targetRot.eulerAngles.x;
+                    if (pitch > 180f) pitch -= 360f;
+                    if (pitch < -89f) pitch = -89f;
+                    else if (pitch > 89f) pitch = 89f;
+                    _playerLookPitchField.SetValue(player, pitch);
+                }
+
+                if (_playerSetLookDirMethod != null)
+                {
+                    var pars = _playerSetLookDirMethod.GetParameters();
+                    if (pars.Length == 1)
+                        _playerSetLookDirMethod.Invoke(player, new object[] { forward });
+                    else if (pars.Length >= 2)
+                        _playerSetLookDirMethod.Invoke(player, new object[] { forward, 0f });
+                }
+
+                if (_playerEyeField != null)
+                {
+                    var eye = _playerEyeField.GetValue(player) as Component;
+                    if (eye != null) eye.transform.rotation = targetRot;
+                }
+            }
+            catch { }
+        }
+
+        private static void ApplyGameCameraTransform(Vector3 targetPos, Quaternion targetRot, float fov, float cameraDistance)
+        {
             try
             {
                 if (_gameCameraInstanceField != null)
@@ -496,37 +726,75 @@ namespace WorldCompareScreenshots
                         camInstance.transform.position = targetPos;
                         camInstance.transform.rotation = targetRot;
 
-                        if (_gameCameraYawField != null)
-                            _gameCameraYawField.SetValue(camInstance, targetRot.eulerAngles.y);
-                        if (_gameCameraPitchField != null)
-                            _gameCameraPitchField.SetValue(camInstance, targetRot.eulerAngles.x);
+                        float yaw = targetRot.eulerAngles.y;
+                        float pitch = targetRot.eulerAngles.x;
+                        if (pitch > 180f) pitch -= 360f;
+                        if (pitch < -89f) pitch = -89f;
+                        else if (pitch > 89f) pitch = 89f;
+
+                        _gameCameraFreeFlyYawField?.SetValue(camInstance, yaw);
+                        _gameCameraFreeFlyPitchField?.SetValue(camInstance, -pitch);
+                        _gameCameraYawField?.SetValue(camInstance, yaw);
+                        _gameCameraPitchField?.SetValue(camInstance, pitch);
+
+                        if (_gameCameraDistanceField != null && cameraDistance >= 0f)
+                            _gameCameraDistanceField.SetValue(camInstance, cameraDistance);
 
                         if (_gameCameraCameraField != null)
                         {
                             var cam = _gameCameraCameraField.GetValue(camInstance) as Camera;
-                            if (cam != null && waypoint.fov > 0f)
-                            {
-                                cam.fieldOfView = waypoint.fov;
-                            }
+                            if (cam != null && fov > 0f) cam.fieldOfView = fov;
                         }
-                        handled = true;
+                        return;
                     }
                 }
             }
             catch { }
 
-            // 3. Fallback to Camera.main
             if (Camera.main != null)
             {
                 Camera.main.transform.position = targetPos;
                 Camera.main.transform.rotation = targetRot;
-                if (waypoint.fov > 0f)
+                if (fov > 0f) Camera.main.fieldOfView = fov;
+            }
+        }
+
+        public static bool TeleportToWaypoint(ScreenshotWaypoint waypoint, bool enableFly = true)
+        {
+            if (waypoint == null) return false;
+            Initialize();
+
+            Vector3 targetPos = waypoint.Position;
+            Quaternion targetRot = waypoint.Rotation;
+
+            ResetTeleportCooldown();
+
+            bool handled = false;
+            var player = GetLocalPlayer() as Component;
+            if (player != null)
+            {
+                try
                 {
-                    Camera.main.fieldOfView = waypoint.fov;
+                    ApplyPlayerFlightAndGodMode(player, enableFly);
+                    ResetPlayerPhysics(player);
+
+                    if (_playerTeleportToMethod != null)
+                    {
+                        _playerTeleportToMethod.Invoke(player, new object[] { targetPos, targetRot, false });
+                    }
+                    else
+                    {
+                        player.transform.position = targetPos;
+                        player.transform.rotation = targetRot;
+                    }
+
+                    ApplyPlayerRotation(player, targetRot);
+                    handled = true;
                 }
-                handled = true;
+                catch { }
             }
 
+            ApplyGameCameraTransform(targetPos, targetRot, waypoint.fov, waypoint.cameraDistance);
             return handled;
         }
 
