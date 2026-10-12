@@ -346,6 +346,7 @@ namespace WorldCompareScreenshots
                 ValheimAdapter.SetHudVisible(false);
             }
 
+            yield return null;
             yield return new WaitForEndOfFrame();
 
             string fileName = WaypointStore.GenerateScreenshotFileName(wp, index, worldName, DateTime.Now);
@@ -392,6 +393,7 @@ namespace WorldCompareScreenshots
                     ValheimAdapter.SetHudVisible(false);
                 }
 
+                yield return null;
                 yield return new WaitForEndOfFrame();
 
                 string fileName = WaypointStore.GenerateScreenshotFileName(wp, i, worldName, DateTime.Now);

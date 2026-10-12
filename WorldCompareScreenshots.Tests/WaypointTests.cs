@@ -320,5 +320,35 @@ namespace WorldCompareScreenshots.Tests
             Assert.AreEqual("Old Waypoint", list[0].name);
             Assert.AreEqual(4f, list[0].cameraDistance, 0.001f);
         }
+
+        [TestMethod]
+        public void ValheimAdapter_FirstPersonAndSingletonHelpers_SafelyDegradeWhenGameNotLoaded()
+        {
+            ValheimAdapter.Initialize();
+
+            // Singletons return null when game assembly is not loaded
+            Assert.IsNull(ValheimAdapter.GetGameCameraInstance());
+            Assert.IsNull(ValheimAdapter.GetHudInstance());
+            Assert.IsNull(ValheimAdapter.GetMessageHudInstance());
+
+            // First person detection and setting degrade safely without throwing
+            bool isFirstPerson = ValheimAdapter.IsFirstPersonActive();
+            Assert.IsFalse(isFirstPerson);
+
+            ValheimAdapter.SetFirstPersonMode(true);
+            ValheimAdapter.SetFirstPersonMode(false);
+            ValheimAdapter.SetCameraDistance(0f);
+            ValheimAdapter.SetCameraDistance(4f);
+        }
+
+        [TestMethod]
+        public void Waypoint_FirstPersonDistance_RecognizedCorrectly()
+        {
+            var fpWaypoint = ScreenshotWaypoint.Create(0, 0, 0, 0, 0, 0, 1, 65f, 0f, "FP", "World", false);
+            Assert.IsLessThanOrEqualTo(0.5f, fpWaypoint.cameraDistance);
+
+            var tpWaypoint = ScreenshotWaypoint.Create(0, 0, 0, 0, 0, 0, 1, 65f, 4.5f, "TP", "World", false);
+            Assert.IsGreaterThan(0.5f, tpWaypoint.cameraDistance);
+        }
     }
 }

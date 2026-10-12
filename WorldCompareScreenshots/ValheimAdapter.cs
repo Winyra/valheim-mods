@@ -27,9 +27,11 @@ namespace WorldCompareScreenshots
         private static FieldInfo _playerLookYawField;
         private static FieldInfo _playerLookPitchField;
         private static FieldInfo _playerEyeField;
+        private static FieldInfo _playerHeadField;
 
         // GameCamera reflection
         private static Type _gameCameraType;
+        private static PropertyInfo _gameCameraInstanceProperty;
         private static FieldInfo _gameCameraInstanceField;
         private static FieldInfo _gameCameraFreeFlyField;
         private static FieldInfo _gameCameraFreeFlyYawField;
@@ -37,15 +39,23 @@ namespace WorldCompareScreenshots
         private static FieldInfo _gameCameraYawField;
         private static FieldInfo _gameCameraPitchField;
         private static FieldInfo _gameCameraDistanceField;
+        private static FieldInfo _gameCameraMinDistanceField;
+        private static FieldInfo _gameCameraMaxDistanceField;
+        private static FieldInfo _gameCamera3rdOffsetField;
+        private static FieldInfo _gameCameraFpsOffsetField;
         private static FieldInfo _gameCameraCameraField;
 
         // Hud reflection
         private static Type _hudType;
+        private static PropertyInfo _hudInstanceProperty;
         private static FieldInfo _hudInstanceField;
         private static FieldInfo _hudRootObjectField;
         private static FieldInfo _hudLoadingScreenField;
+        private static FieldInfo _hudUserHiddenField;
         private static FieldInfo _hudInstanceVisibleField;
         private static MethodInfo _hudSetVisibleMethod;
+        private static bool _originalUserHidden = false;
+        private static bool _hasSavedUserHidden = false;
 
         // ZNet reflection
         private static Type _znetType;
@@ -56,8 +66,15 @@ namespace WorldCompareScreenshots
 
         // MessageHud reflection
         private static Type _messageHudType;
+        private static PropertyInfo _messageHudInstanceProperty;
         private static FieldInfo _messageHudInstanceField;
         private static MethodInfo _messageHudShowMessageMethod;
+
+        // Azumatt FirstPersonMode mod integration
+        private static bool _azumattInitChecked = false;
+        private static Type _azumattDynamicPersonType;
+        private static FieldInfo _azumattIsFirstPersonField;
+        private static MethodInfo _azumattIsInFPMethod;
 
         public static void Initialize()
         {
@@ -157,6 +174,47 @@ namespace WorldCompareScreenshots
             return null;
         }
 
+        private static object GetStaticSingleton(Type type)
+        {
+            if (type == null) return null;
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+            try
+            {
+                var prop = type.GetProperty("instance", flags) ?? type.GetProperty("Instance", flags);
+                if (prop != null)
+                {
+                    var val = prop.GetValue(null, null);
+                    if (val != null) return val;
+                }
+            }
+            catch { }
+
+            try
+            {
+                var field = type.GetField("m_instance", flags) ?? type.GetField("instance", flags) ?? type.GetField("Instance", flags);
+                if (field != null)
+                {
+                    var val = field.GetValue(null);
+                    if (val != null) return val;
+                }
+            }
+            catch { }
+
+            try
+            {
+                var unityObjectType = type.Assembly.GetType("UnityEngine.Object") ?? Type.GetType("UnityEngine.Object, UnityEngine.CoreModule");
+                var method = unityObjectType?.GetMethod("FindObjectOfType", new[] { typeof(Type) });
+                if (method != null)
+                {
+                    var found = method.Invoke(null, new object[] { type });
+                    if (found != null) return found;
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
         private static void InitPlayer()
         {
             _playerType = _valheimAssembly.GetType("Player");
@@ -176,6 +234,7 @@ namespace WorldCompareScreenshots
             _playerLookYawField = FindField(_playerType, "m_lookYaw", instanceFlags);
             _playerLookPitchField = FindField(_playerType, "m_lookPitch", instanceFlags);
             _playerEyeField = FindField(_playerType, "m_eye", instanceFlags);
+            _playerHeadField = FindField(_playerType, "m_head", instanceFlags);
         }
 
         private static void InitCamera()
@@ -186,13 +245,18 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _gameCameraInstanceField = FindField(_gameCameraType, "instance", staticFlags);
+            _gameCameraInstanceProperty = _gameCameraType.GetProperty("instance", staticFlags) ?? _gameCameraType.GetProperty("Instance", staticFlags);
+            _gameCameraInstanceField = FindField(_gameCameraType, "m_instance", staticFlags) ?? FindField(_gameCameraType, "instance", staticFlags);
             _gameCameraFreeFlyField = FindField(_gameCameraType, "m_freeFly", instanceFlags);
             _gameCameraFreeFlyYawField = FindField(_gameCameraType, "m_freeFlyYaw", instanceFlags);
             _gameCameraFreeFlyPitchField = FindField(_gameCameraType, "m_freeFlyPitch", instanceFlags);
             _gameCameraYawField = FindField(_gameCameraType, "m_yaw", instanceFlags);
             _gameCameraPitchField = FindField(_gameCameraType, "m_pitch", instanceFlags);
             _gameCameraDistanceField = FindField(_gameCameraType, "m_distance", instanceFlags);
+            _gameCameraMinDistanceField = FindField(_gameCameraType, "m_minDistance", instanceFlags);
+            _gameCameraMaxDistanceField = FindField(_gameCameraType, "m_maxDistance", instanceFlags);
+            _gameCamera3rdOffsetField = FindField(_gameCameraType, "m_3rdOffset", instanceFlags);
+            _gameCameraFpsOffsetField = FindField(_gameCameraType, "m_fpsOffset", instanceFlags);
             _gameCameraCameraField = FindField(_gameCameraType, "m_camera", instanceFlags);
         }
 
@@ -204,9 +268,11 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _hudInstanceField = FindField(_hudType, "instance", staticFlags);
+            _hudInstanceProperty = _hudType.GetProperty("instance", staticFlags) ?? _hudType.GetProperty("Instance", staticFlags);
+            _hudInstanceField = FindField(_hudType, "m_instance", staticFlags) ?? FindField(_hudType, "instance", staticFlags);
             _hudRootObjectField = FindField(_hudType, "m_rootObject", instanceFlags);
             _hudLoadingScreenField = FindField(_hudType, "m_loadingScreen", instanceFlags);
+            _hudUserHiddenField = FindField(_hudType, "m_userHidden", instanceFlags);
             _hudInstanceVisibleField = FindField(_hudType, "m_instanceVisible", staticFlags);
             _hudSetVisibleMethod = FindMethod(_hudType, "SetVisible", instanceFlags, new[] { typeof(bool) });
         }
@@ -219,8 +285,8 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _znetInstanceProperty = _znetType.GetProperty("instance", staticFlags);
-            _znetInstanceField = _znetType.GetField("instance", staticFlags);
+            _znetInstanceProperty = _znetType.GetProperty("instance", staticFlags) ?? _znetType.GetProperty("Instance", staticFlags);
+            _znetInstanceField = FindField(_znetType, "m_instance", staticFlags) ?? FindField(_znetType, "instance", staticFlags);
             _znetGetWorldNameMethod = _znetType.GetMethod("GetWorldName", instanceFlags);
             _znetWorldField = _znetType.GetField("m_world", instanceFlags);
         }
@@ -233,7 +299,8 @@ namespace WorldCompareScreenshots
             const BindingFlags staticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags instanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-            _messageHudInstanceField = _messageHudType.GetField("instance", staticFlags);
+            _messageHudInstanceProperty = _messageHudType.GetProperty("instance", staticFlags) ?? _messageHudType.GetProperty("Instance", staticFlags);
+            _messageHudInstanceField = FindField(_messageHudType, "m_instance", staticFlags) ?? FindField(_messageHudType, "instance", staticFlags);
             var methods = _messageHudType.GetMethods(instanceFlags);
             foreach (var m in methods)
             {
@@ -309,19 +376,224 @@ namespace WorldCompareScreenshots
             return "UnknownWorld";
         }
 
+        public static object GetGameCameraInstance()
+        {
+            Initialize();
+            return GetStaticSingleton(_gameCameraType);
+        }
+
+        public static object GetHudInstance()
+        {
+            Initialize();
+            return GetStaticSingleton(_hudType);
+        }
+
+        public static object GetMessageHudInstance()
+        {
+            Initialize();
+            return GetStaticSingleton(_messageHudType);
+        }
+
+        private static void InitAzumattFirstPerson()
+        {
+            if (_azumattInitChecked) return;
+            _azumattInitChecked = true;
+            try
+            {
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (_azumattDynamicPersonType == null)
+                    {
+                        var t = asm.GetType("FirstPersonMode.FirstPersonModePlugin+DynamicPerson");
+                        if (t != null)
+                        {
+                            _azumattDynamicPersonType = t;
+                            _azumattIsFirstPersonField = t.GetField("IsFirstPerson", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                        }
+                    }
+
+                    if (_azumattIsInFPMethod == null)
+                    {
+                        var fn = asm.GetType("FirstPersonMode.Util.Functions");
+                        if (fn != null)
+                        {
+                            _azumattIsInFPMethod = fn.GetMethod("IsInFirstPersonMode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static bool IsFirstPersonActive()
+        {
+            InitAzumattFirstPerson();
+            try
+            {
+                if (_azumattIsInFPMethod != null)
+                {
+                    var val = _azumattIsInFPMethod.Invoke(null, null);
+                    if (val is bool b && b) return true;
+                }
+                if (_azumattIsFirstPersonField != null)
+                {
+                    var val = _azumattIsFirstPersonField.GetValue(null);
+                    if (val is bool b && b) return true;
+                }
+            }
+            catch { }
+
+            try
+            {
+                var cam = GetGameCameraInstance();
+                if (cam != null)
+                {
+                    if (_gameCameraMinDistanceField != null && _gameCameraMaxDistanceField != null)
+                    {
+                        var minD = _gameCameraMinDistanceField.GetValue(cam);
+                        var maxD = _gameCameraMaxDistanceField.GetValue(cam);
+                        if (minD is float minDf && maxD is float maxDf && minDf == 0f && maxDf == 0f)
+                            return true;
+                    }
+
+                    if (_gameCameraDistanceField != null)
+                    {
+                        var dist = _gameCameraDistanceField.GetValue(cam);
+                        if (dist is float d && d <= 0.05f)
+                            return true;
+                    }
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        public static void SetFirstPersonMode(bool enable)
+        {
+            InitAzumattFirstPerson();
+            try
+            {
+                if (_azumattIsFirstPersonField != null)
+                {
+                    _azumattIsFirstPersonField.SetValue(null, enable);
+                }
+            }
+            catch { }
+
+            var player = GetLocalPlayer();
+            var cam = GetGameCameraInstance();
+
+            if (enable)
+            {
+                ApplyFirstPersonState(cam, player);
+            }
+            else
+            {
+                ApplyThirdPersonState(cam, player);
+            }
+        }
+
+        private static void ApplyFirstPersonState(object cam, object player)
+        {
+            try
+            {
+                if (cam != null)
+                {
+                    _gameCameraDistanceField?.SetValue(cam, 0f);
+                    _gameCameraMinDistanceField?.SetValue(cam, 0f);
+                    _gameCameraMaxDistanceField?.SetValue(cam, 0f);
+                    if (_gameCamera3rdOffsetField != null)
+                    {
+                        object zero = CreateVector3(_gameCamera3rdOffsetField.FieldType, 0f, 0f, 0f);
+                        if (zero != null) _gameCamera3rdOffsetField.SetValue(cam, zero);
+                    }
+                    if (_gameCameraFpsOffsetField != null)
+                    {
+                        object zero = CreateVector3(_gameCameraFpsOffsetField.FieldType, 0f, 0f, 0f);
+                        if (zero != null) _gameCameraFpsOffsetField.SetValue(cam, zero);
+                    }
+                }
+
+                if (player != null)
+                {
+                    if (_playerHeadField != null)
+                        SetTransformLocalScale(_playerHeadField.GetValue(player), 0f);
+                    if (_playerEyeField != null)
+                        SetTransformLocalScale(_playerEyeField.GetValue(player), 0f);
+                }
+            }
+            catch { }
+        }
+
+        private static void ApplyThirdPersonState(object cam, object player)
+        {
+            try
+            {
+                if (cam != null)
+                {
+                    _gameCameraMinDistanceField?.SetValue(cam, 1f);
+                    _gameCameraMaxDistanceField?.SetValue(cam, 8f);
+                }
+
+                if (player != null)
+                {
+                    if (_playerHeadField != null)
+                        SetTransformLocalScale(_playerHeadField.GetValue(player), 1f);
+                    if (_playerEyeField != null)
+                        SetTransformLocalScale(_playerEyeField.GetValue(player), 1f);
+                }
+            }
+            catch { }
+        }
+
+        private static object CreateVector3(Type v3Type, float x, float y, float z)
+        {
+            if (v3Type == null) return null;
+            try
+            {
+                return Activator.CreateInstance(v3Type, x, y, z);
+            }
+            catch { return null; }
+        }
+
+        private static void SetTransformLocalScale(object target, float scaleVal)
+        {
+            if (target == null) return;
+            try
+            {
+                var scaleProp = target.GetType().GetProperty("localScale");
+                if (scaleProp != null)
+                {
+                    object v = CreateVector3(scaleProp.PropertyType, scaleVal, scaleVal, scaleVal);
+                    if (v != null) scaleProp.SetValue(target, v, null);
+                    return;
+                }
+                var trProp = target.GetType().GetProperty("transform");
+                var tr = trProp?.GetValue(target, null);
+                if (tr != null)
+                {
+                    var trScaleProp = tr.GetType().GetProperty("localScale");
+                    if (trScaleProp != null)
+                    {
+                        object v = CreateVector3(trScaleProp.PropertyType, scaleVal, scaleVal, scaleVal);
+                        if (v != null) trScaleProp.SetValue(tr, v, null);
+                    }
+                }
+            }
+            catch { }
+        }
+
         public static bool IsFreeFlyActive()
         {
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null && _gameCameraFreeFlyField != null)
+                var camInstance = GetGameCameraInstance();
+                if (camInstance != null && _gameCameraFreeFlyField != null)
                 {
-                    var camInstance = _gameCameraInstanceField.GetValue(null);
-                    if (camInstance != null)
-                    {
-                        var val = _gameCameraFreeFlyField.GetValue(camInstance);
-                        if (val is bool b) return b;
-                    }
+                    var val = _gameCameraFreeFlyField.GetValue(camInstance);
+                    if (val is bool b) return b;
                 }
             }
             catch { }
@@ -333,20 +605,10 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null)
+                var camInstance = GetGameCameraInstance() as Component;
+                if (camInstance != null)
                 {
-                    object camInstance = _gameCameraInstanceField.GetValue(null);
-                    if (camInstance != null)
-                    {
-                        var trProp = camInstance.GetType().GetProperty("transform");
-                        if (trProp != null)
-                        {
-                            var tr = trProp.GetValue(camInstance, null);
-                            var posProp = tr?.GetType().GetProperty("position");
-                            if (posProp != null && posProp.GetValue(tr, null) is Vector3 v)
-                                return v;
-                        }
-                    }
+                    return camInstance.transform.position;
                 }
             }
             catch { }
@@ -385,20 +647,10 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null)
+                var camInstance = GetGameCameraInstance() as Component;
+                if (camInstance != null)
                 {
-                    object camInstance = _gameCameraInstanceField.GetValue(null);
-                    if (camInstance != null)
-                    {
-                        var trProp = camInstance.GetType().GetProperty("transform");
-                        if (trProp != null)
-                        {
-                            var tr = trProp.GetValue(camInstance, null);
-                            var rotProp = tr?.GetType().GetProperty("rotation");
-                            if (rotProp != null && rotProp.GetValue(tr, null) is Quaternion q)
-                                return q;
-                        }
-                    }
+                    return camInstance.transform.rotation;
                 }
             }
             catch { }
@@ -443,18 +695,15 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null && _gameCameraCameraField != null)
+                var camInstance = GetGameCameraInstance();
+                if (camInstance != null && _gameCameraCameraField != null)
                 {
-                    object camInstance = _gameCameraInstanceField.GetValue(null);
-                    if (camInstance != null)
+                    object cam = _gameCameraCameraField.GetValue(camInstance);
+                    if (cam != null)
                     {
-                        object cam = _gameCameraCameraField.GetValue(camInstance);
-                        if (cam != null)
-                        {
-                            var fovProp = cam.GetType().GetProperty("fieldOfView");
-                            if (fovProp != null && fovProp.GetValue(cam, null) is float fov)
-                                return fov;
-                        }
+                        var fovProp = cam.GetType().GetProperty("fieldOfView");
+                        if (fovProp != null && fovProp.GetValue(cam, null) is float fov)
+                            return fov;
                     }
                 }
             }
@@ -493,35 +742,32 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_hudInstanceField != null && _hudLoadingScreenField != null)
+                var hudInstance = GetHudInstance();
+                if (hudInstance != null && _hudLoadingScreenField != null)
                 {
-                    object hudInstance = _hudInstanceField.GetValue(null);
-                    if (hudInstance != null)
+                    object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
+                    if (loadingScreen != null)
                     {
-                        object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
-                        if (loadingScreen != null)
+                        var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                        object go = goProp?.GetValue(loadingScreen, null);
+                        if (go != null)
                         {
-                            var goProp = loadingScreen.GetType().GetProperty("gameObject");
-                            object go = goProp?.GetValue(loadingScreen, null);
-                            if (go != null)
-                            {
-                                var activeInHierarchyProp = go.GetType().GetProperty("activeInHierarchy");
-                                if (activeInHierarchyProp != null && activeInHierarchyProp.GetValue(go, null) is bool active && !active)
-                                    return false;
-                            }
+                            var activeInHierarchyProp = go.GetType().GetProperty("activeInHierarchy");
+                            if (activeInHierarchyProp != null && activeInHierarchyProp.GetValue(go, null) is bool active && !active)
+                                return false;
+                        }
 
-                            var alphaProp = loadingScreen.GetType().GetProperty("alpha");
-                            if (alphaProp != null && alphaProp.GetValue(loadingScreen, null) is float alpha)
-                            {
-                                return alpha > 0.05f;
-                            }
+                        var alphaProp = loadingScreen.GetType().GetProperty("alpha");
+                        if (alphaProp != null && alphaProp.GetValue(loadingScreen, null) is float alpha)
+                        {
+                            return alpha > 0.05f;
+                        }
 
-                            if (go != null)
-                            {
-                                var activeSelfProp = go.GetType().GetProperty("activeSelf");
-                                if (activeSelfProp != null && activeSelfProp.GetValue(go, null) is bool selfActive)
-                                    return selfActive;
-                            }
+                        if (go != null)
+                        {
+                            var activeSelfProp = go.GetType().GetProperty("activeSelf");
+                            if (activeSelfProp != null && activeSelfProp.GetValue(go, null) is bool selfActive)
+                                return selfActive;
                         }
                     }
                 }
@@ -535,36 +781,33 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_hudInstanceField != null && _hudLoadingScreenField != null)
+                var hudInstance = GetHudInstance();
+                if (hudInstance != null && _hudLoadingScreenField != null)
                 {
-                    object hudInstance = _hudInstanceField.GetValue(null);
-                    if (hudInstance != null)
+                    object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
+                    if (loadingScreen != null)
                     {
-                        object loadingScreen = _hudLoadingScreenField.GetValue(hudInstance);
-                        if (loadingScreen != null)
+                        if (!visible)
                         {
-                            if (!visible)
-                            {
-                                var alphaProp = loadingScreen.GetType().GetProperty("alpha");
-                                alphaProp?.SetValue(loadingScreen, 0f, null);
+                            var alphaProp = loadingScreen.GetType().GetProperty("alpha");
+                            alphaProp?.SetValue(loadingScreen, 0f, null);
 
-                                var goProp = loadingScreen.GetType().GetProperty("gameObject");
-                                object go = goProp?.GetValue(loadingScreen, null);
-                                if (go != null)
-                                {
-                                    var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
-                                    setActive?.Invoke(go, new object[] { false });
-                                }
-                            }
-                            else
+                            var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                            object go = goProp?.GetValue(loadingScreen, null);
+                            if (go != null)
                             {
-                                var goProp = loadingScreen.GetType().GetProperty("gameObject");
-                                object go = goProp?.GetValue(loadingScreen, null);
-                                if (go != null)
-                                {
-                                    var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
-                                    setActive?.Invoke(go, new object[] { true });
-                                }
+                                var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
+                                setActive?.Invoke(go, new object[] { false });
+                            }
+                        }
+                        else
+                        {
+                            var goProp = loadingScreen.GetType().GetProperty("gameObject");
+                            object go = goProp?.GetValue(loadingScreen, null);
+                            if (go != null)
+                            {
+                                var setActive = go.GetType().GetMethod("SetActive", new[] { typeof(bool) });
+                                setActive?.Invoke(go, new object[] { true });
                             }
                         }
                     }
@@ -578,14 +821,16 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null && _gameCameraDistanceField != null)
+                if (IsFirstPersonActive())
                 {
-                    var cam = _gameCameraInstanceField.GetValue(null);
-                    if (cam != null)
-                    {
-                        var val = _gameCameraDistanceField.GetValue(cam);
-                        if (val is float f) return f;
-                    }
+                    return 0f;
+                }
+
+                var cam = GetGameCameraInstance();
+                if (cam != null && _gameCameraDistanceField != null)
+                {
+                    var val = _gameCameraDistanceField.GetValue(cam);
+                    if (val is float f) return f;
                 }
             }
             catch { }
@@ -597,13 +842,27 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_gameCameraInstanceField != null && _gameCameraDistanceField != null)
+                bool wantFirstPerson = distance <= 0.5f;
+                SetFirstPersonMode(wantFirstPerson);
+
+                if (!wantFirstPerson)
                 {
-                    var cam = _gameCameraInstanceField.GetValue(null);
+                    var cam = GetGameCameraInstance();
                     if (cam != null)
                     {
-                        float safeDist = distance < 0f ? 0f : distance;
-                        _gameCameraDistanceField.SetValue(cam, safeDist);
+                        if (_gameCameraMinDistanceField != null)
+                        {
+                            var curMin = _gameCameraMinDistanceField.GetValue(cam);
+                            if (curMin is float f && f == 0f)
+                                _gameCameraMinDistanceField.SetValue(cam, 1f);
+                        }
+                        if (_gameCameraMaxDistanceField != null)
+                        {
+                            var curMax = _gameCameraMaxDistanceField.GetValue(cam);
+                            if (curMax is float f && f < distance)
+                                _gameCameraMaxDistanceField.SetValue(cam, distance);
+                        }
+                        _gameCameraDistanceField?.SetValue(cam, distance);
                     }
                 }
             }
@@ -718,35 +977,34 @@ namespace WorldCompareScreenshots
         {
             try
             {
-                if (_gameCameraInstanceField != null)
+                var camInstance = GetGameCameraInstance() as Component;
+                if (camInstance != null)
                 {
-                    var camInstance = _gameCameraInstanceField.GetValue(null) as Component;
-                    if (camInstance != null)
+                    camInstance.transform.position = targetPos;
+                    camInstance.transform.rotation = targetRot;
+
+                    float yaw = targetRot.eulerAngles.y;
+                    float pitch = targetRot.eulerAngles.x;
+                    if (pitch > 180f) pitch -= 360f;
+                    if (pitch < -89f) pitch = -89f;
+                    else if (pitch > 89f) pitch = 89f;
+
+                    _gameCameraFreeFlyYawField?.SetValue(camInstance, yaw);
+                    _gameCameraFreeFlyPitchField?.SetValue(camInstance, -pitch);
+                    _gameCameraYawField?.SetValue(camInstance, yaw);
+                    _gameCameraPitchField?.SetValue(camInstance, pitch);
+
+                    if (cameraDistance >= 0f)
                     {
-                        camInstance.transform.position = targetPos;
-                        camInstance.transform.rotation = targetRot;
-
-                        float yaw = targetRot.eulerAngles.y;
-                        float pitch = targetRot.eulerAngles.x;
-                        if (pitch > 180f) pitch -= 360f;
-                        if (pitch < -89f) pitch = -89f;
-                        else if (pitch > 89f) pitch = 89f;
-
-                        _gameCameraFreeFlyYawField?.SetValue(camInstance, yaw);
-                        _gameCameraFreeFlyPitchField?.SetValue(camInstance, -pitch);
-                        _gameCameraYawField?.SetValue(camInstance, yaw);
-                        _gameCameraPitchField?.SetValue(camInstance, pitch);
-
-                        if (_gameCameraDistanceField != null && cameraDistance >= 0f)
-                            _gameCameraDistanceField.SetValue(camInstance, cameraDistance);
-
-                        if (_gameCameraCameraField != null)
-                        {
-                            var cam = _gameCameraCameraField.GetValue(camInstance) as Camera;
-                            if (cam != null && fov > 0f) cam.fieldOfView = fov;
-                        }
-                        return;
+                        SetCameraDistance(cameraDistance);
                     }
+
+                    if (_gameCameraCameraField != null)
+                    {
+                        var cam = _gameCameraCameraField.GetValue(camInstance) as Camera;
+                        if (cam != null && fov > 0f) cam.fieldOfView = fov;
+                    }
+                    return;
                 }
             }
             catch { }
@@ -803,30 +1061,76 @@ namespace WorldCompareScreenshots
             Initialize();
             try
             {
-                if (_hudInstanceField != null)
+                var hudInstance = GetHudInstance();
+                if (hudInstance != null)
                 {
-                    var hudInstance = _hudInstanceField.GetValue(null);
-                    if (hudInstance != null)
-                    {
-                        if (_hudSetVisibleMethod != null)
-                        {
-                            _hudSetVisibleMethod.Invoke(hudInstance, new object[] { visible });
-                        }
+                    UpdateHudUserHidden(hudInstance, visible);
+                    _hudSetVisibleMethod?.Invoke(hudInstance, new object[] { visible });
+                    UpdateHudRootPositionAndCanvas(hudInstance, visible);
+                    _hudInstanceVisibleField?.SetValue(null, visible);
+                }
+            }
+            catch { }
+        }
 
-                        if (_hudRootObjectField != null)
+        private static void UpdateHudUserHidden(object hudInstance, bool visible)
+        {
+            if (_hudUserHiddenField == null) return;
+            try
+            {
+                if (!visible)
+                {
+                    if (!_hasSavedUserHidden)
+                    {
+                        var cur = _hudUserHiddenField.GetValue(hudInstance);
+                        if (cur is bool b) _originalUserHidden = b;
+                        _hasSavedUserHidden = true;
+                    }
+                    _hudUserHiddenField.SetValue(hudInstance, true);
+                }
+                else
+                {
+                    _hudUserHiddenField.SetValue(hudInstance, _hasSavedUserHidden ? _originalUserHidden : false);
+                    _hasSavedUserHidden = false;
+                }
+            }
+            catch { }
+        }
+
+        private static void UpdateHudRootPositionAndCanvas(object hudInstance, bool visible)
+        {
+            try
+            {
+                if (_hudRootObjectField != null)
+                {
+                    object root = _hudRootObjectField.GetValue(hudInstance);
+                    if (root != null)
+                    {
+                        var trProp = root.GetType().GetProperty("transform");
+                        var tr = trProp?.GetValue(root, null);
+                        if (tr != null)
                         {
-                            object root = _hudRootObjectField.GetValue(hudInstance);
-                            if (root != null)
+                            var posProp = tr.GetType().GetProperty("localPosition");
+                            if (posProp != null)
                             {
-                                var setActive = root.GetType().GetMethod("SetActive", new[] { typeof(bool) });
-                                setActive?.Invoke(root, new object[] { visible });
+                                object posObj = CreateVector3(posProp.PropertyType, visible ? 0f : 10000f, 0f, 0f);
+                                if (posObj != null) posProp.SetValue(tr, posObj, null);
                             }
                         }
 
-                        if (_hudInstanceVisibleField != null)
-                        {
-                            _hudInstanceVisibleField.SetValue(null, visible);
-                        }
+                        var setActive = root.GetType().GetMethod("SetActive", new[] { typeof(bool) });
+                        setActive?.Invoke(root, new object[] { visible });
+                    }
+                }
+
+                var getComp = hudInstance.GetType().GetMethod("GetComponent", new[] { typeof(string) });
+                if (getComp != null)
+                {
+                    var canvas = getComp.Invoke(hudInstance, new object[] { "Canvas" });
+                    if (canvas != null)
+                    {
+                        var enabledProp = canvas.GetType().GetProperty("enabled");
+                        enabledProp?.SetValue(canvas, visible, null);
                     }
                 }
             }
@@ -840,20 +1144,23 @@ namespace WorldCompareScreenshots
 
             try
             {
-                if (_messageHudInstanceField != null && _messageHudShowMessageMethod != null)
+                var hud = GetMessageHudInstance();
+                if (hud != null && _messageHudShowMessageMethod != null)
                 {
-                    var hud = _messageHudInstanceField.GetValue(null);
-                    if (hud != null)
+                    // MessageType enum value: TopLeft = 1, Center = 2
+                    var paramTypes = _messageHudShowMessageMethod.GetParameters();
+                    if (paramTypes.Length >= 2 && paramTypes[0].ParameterType.IsEnum)
                     {
-                        // MessageType enum value: TopLeft = 1, Center = 2
-                        var paramTypes = _messageHudShowMessageMethod.GetParameters();
-                        if (paramTypes.Length >= 2 && paramTypes[0].ParameterType.IsEnum)
-                        {
-                            var enumVal = Enum.ToObject(paramTypes[0].ParameterType, 1);
-                            _messageHudShowMessageMethod.Invoke(hud, new object[] { enumVal, message, 0, null });
-                            return;
-                        }
+                        var enumVal = Enum.ToObject(paramTypes[0].ParameterType, 1);
+                        _messageHudShowMessageMethod.Invoke(hud, new object[] { enumVal, message, 0, null });
+                        return;
                     }
+                    else if (paramTypes.Length >= 2)
+                    {
+                        _messageHudShowMessageMethod.Invoke(hud, new object[] { 1, message, 0, null });
+                        return;
+                    }
+                    _messageHudShowMessageMethod.Invoke(hud, new object[] { message });
                 }
             }
             catch { }
