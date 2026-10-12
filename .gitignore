@@ -1,2 +1,8 @@
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.dll
 TreeTransparency/bin
 TreeTransparency/obj

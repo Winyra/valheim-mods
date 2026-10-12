@@ -1,0 +1,7 @@
+{
+    "name": "WorldCompareScreenshots",
+    "version_number": "1.0.0",
+    "website_url": "https://github.com/Winyra/valheim-mods",
+    "description": "Client-side Valheim BepInEx mod to capture screenshots from identical camera and player positions across multiple world saves for base comparison.",
+    "dependencies": []
+}
