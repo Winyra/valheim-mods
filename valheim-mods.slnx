@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="TreeTransparency/TreeTransparency.csproj" />
+  <Project Path="WorldCompareScreenshots.Tests/WorldCompareScreenshots.Tests.csproj" />
+  <Project Path="WorldCompareScreenshots/WorldCompareScreenshots.csproj" />
+</Solution>

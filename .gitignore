@@ -1,2 +1,6 @@
-TreeTransparency/bin
-TreeTransparency/obj
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.dll
